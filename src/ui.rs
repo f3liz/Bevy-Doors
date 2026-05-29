@@ -11,48 +11,52 @@ pub struct DoorLabel;
 #[derive(Component)]
 pub struct MenuRoot;
 
+#[derive(Component)]
+pub struct MenuTitle;
+
+#[derive(Component)]
+pub struct MenuSubtitle;
+
+#[derive(Component)]
+pub struct OverlayCamera;
+
 pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_ui)
             .add_systems(OnEnter(GameState::Lobby), show_lobby_menu)
-            .add_systems(OnEnter(GameState::GameOver), show_game_over_menu)
+            .add_systems(OnEnter(GameState::GameOver), (spawn_overlay_camera, show_game_over_menu))
+            .add_systems(OnExit(GameState::GameOver), despawn_overlay_camera)
             .add_systems(OnEnter(GameState::Playing), show_hud_hide_menu)
-            .add_systems(
-                Update,
-                (update_door_label, game_over_input).run_if(in_state(GameState::Playing).or(in_state(GameState::GameOver))),
-            )
-            .add_systems(
-                Update,
-                game_over_input.run_if(in_state(GameState::GameOver)),
-            );
+            .add_systems(Update, update_door_label.run_if(in_state(GameState::Playing)))
+            .add_systems(Update, game_over_input.run_if(in_state(GameState::GameOver)));
     }
 }
 
 fn setup_ui(mut commands: Commands) {
-    commands.spawn((
-        HudRoot,
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            flex_direction: FlexDirection::Column,
-            justify_content: JustifyContent::SpaceBetween,
-            padding: UiRect::all(Val::Px(16.0)),
-            ..default()
-        },
-        Visibility::Hidden,
-    )).with_children(|parent| {
-        parent.spawn((
-            DoorLabel,
-            Text::new("Door 1"),
-            TextFont {
-                font_size: 28.0,
+    commands
+        .spawn((
+            HudRoot,
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                padding: UiRect::all(Val::Px(16.0)),
                 ..default()
             },
-            TextColor(Color::srgb(0.95, 0.88, 0.7)),
-        ));
-    });
+            Visibility::Hidden,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                DoorLabel,
+                Text::new("Door 1"),
+                TextFont {
+                    font_size: 28.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.95, 0.88, 0.7)),
+            ));
+        });
 
     commands
         .spawn((
@@ -67,9 +71,11 @@ fn setup_ui(mut commands: Commands) {
                 ..default()
             },
             BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.55)),
+            Visibility::Visible,
         ))
         .with_children(|parent| {
             parent.spawn((
+                MenuTitle,
                 Text::new("Bevy Doors"),
                 TextFont {
                     font_size: 48.0,
@@ -78,6 +84,7 @@ fn setup_ui(mut commands: Commands) {
                 TextColor(Color::srgb(0.9, 0.82, 0.65)),
             ));
             parent.spawn((
+                MenuSubtitle,
                 Text::new("Press SPACE to enter the hotel"),
                 TextFont {
                     font_size: 22.0,
@@ -99,7 +106,8 @@ fn setup_ui(mut commands: Commands) {
 fn show_lobby_menu(
     mut hud: Query<&mut Visibility, (With<HudRoot>, Without<MenuRoot>)>,
     mut menu: Query<&mut Visibility, (With<MenuRoot>, Without<HudRoot>)>,
-    mut menu_text: Query<&mut Text, With<MenuRoot>>,
+    mut title: Query<&mut Text, With<MenuTitle>>,
+    mut subtitle: Query<&mut Text, (With<MenuSubtitle>, Without<MenuTitle>)>,
 ) {
     if let Ok(mut vis) = hud.single_mut() {
         *vis = Visibility::Hidden;
@@ -107,8 +115,11 @@ fn show_lobby_menu(
     if let Ok(mut vis) = menu.single_mut() {
         *vis = Visibility::Visible;
     }
-    for mut text in &mut menu_text {
+    if let Ok(mut text) = title.single_mut() {
         **text = "Bevy Doors".to_string();
+    }
+    if let Ok(mut text) = subtitle.single_mut() {
+        **text = "Press SPACE to enter the hotel".to_string();
     }
 }
 
@@ -116,7 +127,8 @@ fn show_game_over_menu(
     mut hud: Query<&mut Visibility, (With<HudRoot>, Without<MenuRoot>)>,
     mut menu: Query<&mut Visibility, (With<MenuRoot>, Without<HudRoot>)>,
     stats: Res<RunStats>,
-    mut menu_children: Query<&mut Text, Without<DoorLabel>>,
+    mut title: Query<&mut Text, With<MenuTitle>>,
+    mut subtitle: Query<&mut Text, (With<MenuSubtitle>, Without<MenuTitle>)>,
 ) {
     if let Ok(mut vis) = hud.single_mut() {
         *vis = Visibility::Hidden;
@@ -124,10 +136,11 @@ fn show_game_over_menu(
     if let Ok(mut vis) = menu.single_mut() {
         *vis = Visibility::Visible;
     }
-    let mut lines = menu_children.iter_mut().collect::<Vec<_>>();
-    if lines.len() >= 2 {
-        **lines[0] = "You died".to_string();
-        **lines[1] = format!(
+    if let Ok(mut text) = title.single_mut() {
+        **text = "You died".to_string();
+    }
+    if let Ok(mut text) = subtitle.single_mut() {
+        **text = format!(
             "Doors cleared: {}  —  Press SPACE for lobby",
             stats.doors_cleared
         );
@@ -154,6 +167,20 @@ fn update_door_label(
         return;
     };
     **text = format!("Door {}", progress.door_number);
+}
+
+fn spawn_overlay_camera(mut commands: Commands) {
+    commands.spawn((
+        OverlayCamera,
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 2.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+}
+
+fn despawn_overlay_camera(mut commands: Commands, cameras: Query<Entity, With<OverlayCamera>>) {
+    for entity in &cameras {
+        commands.entity(entity).despawn();
+    }
 }
 
 fn game_over_input(

@@ -1,12 +1,15 @@
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
-use crate::game_state::GameState;
-use crate::hallway::{despawn_hallway, spawn_hallway_segment};
-use crate::player::{despawn_player, spawn_player, PLAYER_EYE_HEIGHT};
+use crate::game_state::{GameState, HallwayProgress, RunStats};
+use crate::hallway::spawn_hallway_segment;
+use crate::player::spawn_player;
 
 #[derive(Component)]
 pub struct LobbyEntity;
+
+#[derive(Component)]
+pub struct LobbyCamera;
 
 pub struct LobbyPlugin;
 
@@ -49,22 +52,20 @@ fn setup_lobby(
     let floor_mesh = meshes.add(Plane3d::new(Vec3::Y, Vec2::splat(1.0)));
     let wall_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
 
-    commands
-        .spawn((
-            LobbyEntity,
-            Mesh3d(floor_mesh.clone()),
-            MeshMaterial3d(carpet),
-            Transform::from_scale(Vec3::new(14.0, 1.0, 14.0)),
-        ))
-        .insert(LobbyEntity);
+    commands.spawn((
+        LobbyEntity,
+        Mesh3d(floor_mesh.clone()),
+        MeshMaterial3d(carpet),
+        Transform::from_scale(Vec3::new(14.0, 1.0, 14.0)),
+    ));
 
-    for (pos, scale) in [
-        (Vec3::new(0.0, 2.0, -7.0), Vec3::new(14.0, 4.0, 0.3)),
-        (Vec3::new(-7.0, 2.0, 0.0), Vec3::new(0.3, 4.0, 14.0)),
-        (Vec3::new(7.0, 2.0, 0.0), Vec3::new(0.3, 4.0, 14.0)),
-        (Vec3::new(0.0, 4.0, 0.0), Vec3::new(14.0, 0.2, 14.0)),
+    for (pos, scale, is_ceiling) in [
+        (Vec3::new(0.0, 2.0, -7.0), Vec3::new(14.0, 4.0, 0.3), false),
+        (Vec3::new(-7.0, 2.0, 0.0), Vec3::new(0.3, 4.0, 14.0), false),
+        (Vec3::new(7.0, 2.0, 0.0), Vec3::new(0.3, 4.0, 14.0), false),
+        (Vec3::new(0.0, 4.0, 0.0), Vec3::new(14.0, 0.2, 14.0), true),
     ] {
-        let mat = if pos.y > 3.0 { &ceiling_mat } else { &wall };
+        let mat = if is_ceiling { &ceiling_mat } else { &wall };
         commands.spawn((
             LobbyEntity,
             Mesh3d(wall_mesh.clone()),
@@ -100,10 +101,20 @@ fn setup_lobby(
         },
         Transform::from_rotation(Quat::from_euler(EulerRot::XYZ, -1.2, 0.4, 0.0)),
     ));
+
+    commands.spawn((
+        LobbyCamera,
+        Camera3d::default(),
+        Transform::from_xyz(0.0, 2.0, -4.0).looking_at(Vec3::new(0.0, 1.2, 2.0), Vec3::Y),
+    ));
 }
 
-fn cleanup_lobby(mut commands: Commands, query: Query<Entity, With<LobbyEntity>>) {
-    for entity in &query {
+fn cleanup_lobby(
+    mut commands: Commands,
+    lobby: Query<Entity, With<LobbyEntity>>,
+    cameras: Query<Entity, With<LobbyCamera>>,
+) {
+    for entity in lobby.iter().chain(cameras.iter()) {
         commands.entity(entity).despawn();
     }
 }
@@ -114,8 +125,8 @@ fn lobby_start_input(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut progress: ResMut<crate::game_state::HallwayProgress>,
-    mut stats: ResMut<crate::game_state::RunStats>,
+    mut progress: ResMut<HallwayProgress>,
+    mut stats: ResMut<RunStats>,
 ) {
     if !keys.just_pressed(KeyCode::Space) {
         return;

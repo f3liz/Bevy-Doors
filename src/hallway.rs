@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::enemy::{despawn_enemies, maybe_spawn_enemy_after_door};
+use crate::enemy::maybe_spawn_enemy_after_door;
 use crate::game_state::{GameState, HallwayProgress, RunStats};
 use crate::player::{Player, PLAYER_EYE_HEIGHT};
 
@@ -30,8 +30,14 @@ fn cleanup_playing_world(
     player: Query<Entity, With<Player>>,
     enemies: Query<Entity, With<crate::enemy::Enemy>>,
 ) {
-    for entity in hallway.iter().chain(player.iter()).chain(enemies.iter()) {
+    for entity in &hallway {
         commands.entity(entity).despawn();
+    }
+    for entity in &enemies {
+        commands.entity(entity).despawn();
+    }
+    for entity in &player {
+        commands.entity(entity).despawn_recursive();
     }
 }
 
