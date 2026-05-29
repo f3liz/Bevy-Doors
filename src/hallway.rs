@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::enemy::{despawn_enemies, maybe_spawn_enemy};
+use crate::enemy::{despawn_enemies, maybe_spawn_enemy_after_door};
 use crate::game_state::{GameState, HallwayProgress, RunStats};
 use crate::player::{Player, PLAYER_EYE_HEIGHT};
 
@@ -12,9 +12,6 @@ pub const DOOR_TRIGGER_Z: f32 = HALL_LENGTH - 4.0;
 #[derive(Component)]
 pub struct HallwayEntity;
 
-#[derive(Component)]
-pub struct DoorTrigger;
-
 pub struct HallwayPlugin;
 
 impl Plugin for HallwayPlugin {
@@ -23,19 +20,19 @@ impl Plugin for HallwayPlugin {
             Update,
             (advance_through_door, clamp_player_in_hall).run_if(in_state(GameState::Playing)),
         )
-        .add_systems(OnExit(GameState::Playing), on_exit_playing);
+        .add_systems(OnExit(GameState::Playing), cleanup_playing_world);
     }
 }
 
-fn on_exit_playing(
+fn cleanup_playing_world(
     mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    hallway: Query<Entity, With<HallwayEntity>>,
+    player: Query<Entity, With<Player>>,
+    enemies: Query<Entity, With<crate::enemy::Enemy>>,
 ) {
-    despawn_hallway(&mut commands);
-    despawn_enemies(&mut commands);
-    crate::player::despawn_player(commands);
-    let _ = (&mut meshes, &mut materials);
+    for entity in hallway.iter().chain(player.iter()).chain(enemies.iter()) {
+        commands.entity(entity).despawn();
+    }
 }
 
 pub fn spawn_hallway_segment(
@@ -141,35 +138,19 @@ pub fn spawn_hallway_segment(
             Transform::from_xyz(0.0, 3.4, 4.0 + i as f32 * 7.0),
         ));
     }
-
-    commands.spawn((
-        HallwayEntity,
-        DoorTrigger,
-        Transform::from_xyz(0.0, 1.0, DOOR_TRIGGER_Z),
-        Visibility::default(),
-    ));
-}
-
-pub fn despawn_hallway(commands: &mut Commands) {
-    // Called via query in plugin - use system instead
-}
-
-pub fn despawn_hallway_entities(mut commands: Commands, query: Query<Entity, With<HallwayEntity>>) {
-    for entity in &query {
-        commands.entity(entity).despawn();
-    }
 }
 
 fn advance_through_door(
     mut commands: Commands,
-    player: Query<&Transform, With<Player>>,
+    mut player: Query<&mut Transform, With<Player>>,
     mut progress: ResMut<HallwayProgress>,
     mut stats: ResMut<RunStats>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     hallway: Query<Entity, With<HallwayEntity>>,
+    enemies: Query<Entity, With<crate::enemy::Enemy>>,
 ) {
-    let Ok(player_tf) = player.single() else {
+    let Ok(mut player_tf) = player.single_mut() else {
         return;
     };
 
@@ -184,16 +165,25 @@ fn advance_through_door(
         commands.entity(entity).despawn();
     }
 
-    if let Ok(mut player) = commands.get_entity(player.single().map(|_| ()).ok().unwrap_or_default()) {
-        let _ = player;
-    }
+    player_tf.translation = Vec3::new(
+        player_tf.translation.x.clamp(-3.0, 3.0),
+        PLAYER_EYE_HEIGHT,
+        2.0,
+    );
 
-    spawn_hallway_segment(&mut commands, &mut meshes, &mut materials, progress.door_number);
-    maybe_spawn_enemy(&mut commands, &mut meshes, &mut materials, progress.door_number);
-
-    if let Ok(mut tf) = commands.get_entity(Entity::PLACEHOLDER) {
-        let _ = tf;
-    }
+    spawn_hallway_segment(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        progress.door_number,
+    );
+    maybe_spawn_enemy_after_door(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &enemies,
+        progress.door_number,
+    );
 }
 
 fn clamp_player_in_hall(mut player: Query<&mut Transform, With<Player>>) {
