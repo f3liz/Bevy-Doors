@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game_state::{GameState, HallwayProgress, RunStats};
+use crate::game_state::{DoorPlacement, GameState, HallwayProgress, RunStats};
 
 #[derive(Component)]
 pub struct HudRoot;
@@ -16,6 +16,9 @@ pub struct MenuTitle;
 
 #[derive(Component)]
 pub struct MenuSubtitle;
+
+#[derive(Component)]
+pub struct DoorHintLabel;
 
 #[derive(Component)]
 pub struct OverlayCamera;
@@ -37,6 +40,7 @@ pub fn setup_ui(mut commands: Commands) {
         .spawn((
             HudRoot,
             Node {
+                position_type: PositionType::Absolute,
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
                 padding: UiRect::all(Val::Px(16.0)),
@@ -47,12 +51,21 @@ pub fn setup_ui(mut commands: Commands) {
         .with_children(|parent| {
             parent.spawn((
                 DoorLabel,
-                Text::new("Door 1"),
+                Text::new("Door 1  |  Cleared: 0"),
                 TextFont {
                     font_size: 28.0,
                     ..default()
                 },
                 TextColor(Color::srgb(0.95, 0.88, 0.7)),
+            ));
+            parent.spawn((
+                DoorHintLabel,
+                Text::new(""),
+                TextFont {
+                    font_size: 18.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.75, 0.7, 0.6)),
             ));
         });
 
@@ -109,6 +122,7 @@ fn sync_ui(
     mut menu: Query<&mut Visibility, (With<MenuRoot>, Without<HudRoot>)>,
     mut text_queries: ParamSet<(
         Query<&mut Text, With<DoorLabel>>,
+        Query<&mut Text, With<DoorHintLabel>>,
         Query<&mut Text, With<MenuTitle>>,
         Query<&mut Text, With<MenuSubtitle>>,
     )>,
@@ -125,26 +139,38 @@ fn sync_ui(
             *hud_vis = Visibility::Visible;
             *menu_vis = Visibility::Hidden;
             if let Ok(mut text) = text_queries.p0().single_mut() {
-                **text = format!("Door {}", progress.door_number);
+                **text = format!(
+                    "Door {} ({})  |  Cleared: {}",
+                    progress.door_number,
+                    progress.current_placement.label(),
+                    stats.doors_cleared
+                );
+            }
+            if let Ok(mut hint) = text_queries.p1().single_mut() {
+                **hint = match progress.current_placement {
+                    DoorPlacement::Ahead => "Go straight ahead".to_string(),
+                    DoorPlacement::Left => "Turn left and walk to the left wall".to_string(),
+                    DoorPlacement::Right => "Turn right and walk to the right wall".to_string(),
+                };
             }
         }
         GameState::Lobby => {
             *hud_vis = Visibility::Hidden;
             *menu_vis = Visibility::Visible;
-            if let Ok(mut text) = text_queries.p1().single_mut() {
+            if let Ok(mut text) = text_queries.p2().single_mut() {
                 **text = "Bevy Doors".to_string();
             }
-            if let Ok(mut text) = text_queries.p2().single_mut() {
+            if let Ok(mut text) = text_queries.p3().single_mut() {
                 **text = "Press SPACE to enter the hotel".to_string();
             }
         }
         GameState::GameOver => {
             *hud_vis = Visibility::Hidden;
             *menu_vis = Visibility::Visible;
-            if let Ok(mut text) = text_queries.p1().single_mut() {
+            if let Ok(mut text) = text_queries.p2().single_mut() {
                 **text = "You died".to_string();
             }
-            if let Ok(mut text) = text_queries.p2().single_mut() {
+            if let Ok(mut text) = text_queries.p3().single_mut() {
                 **text = format!(
                     "Doors cleared: {}  —  Press SPACE for lobby",
                     stats.doors_cleared

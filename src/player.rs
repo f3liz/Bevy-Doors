@@ -48,6 +48,7 @@ pub fn spawn_player(commands: &mut Commands) {
             parent.spawn((
                 PlayerCamera,
                 Camera3d::default(),
+                IsDefaultUiCamera,
                 Transform::IDENTITY,
             ));
         });

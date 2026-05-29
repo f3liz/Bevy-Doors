@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game_state::{GameState, HallwayProgress, RunStats};
+use crate::game_state::{DoorPlacement, GameState, HallwayProgress, RunStats};
 use crate::hallway::spawn_hallway_segment;
 use crate::player::spawn_player;
 
@@ -103,6 +103,7 @@ pub fn setup_lobby(
     commands.spawn((
         LobbyCamera,
         Camera3d::default(),
+        IsDefaultUiCamera,
         Transform::from_xyz(0.0, 2.0, -4.0).looking_at(Vec3::new(0.0, 1.2, 2.0), Vec3::Y),
     ));
 }
@@ -131,10 +132,17 @@ fn lobby_start_input(
     }
 
     progress.door_number = 1;
+    progress.current_placement = DoorPlacement::for_door_number(1);
     stats.doors_cleared = 0;
 
     spawn_player(&mut commands);
-    spawn_hallway_segment(&mut commands, &mut meshes, &mut materials, progress.door_number);
+    spawn_hallway_segment(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        progress.door_number,
+        progress.current_placement,
+    );
 
     next_state.set(GameState::Playing);
 }
