@@ -72,16 +72,17 @@ pub fn maybe_spawn_enemy_after_door(
 
 fn enemy_update(
     time: Res<Time>,
-    player: Query<&Transform, With<Player>>,
-    mut enemies: Query<&mut Transform, With<Enemy>>,
+    player: Query<&Transform, (With<Player>, Without<Enemy>)>,
+    mut enemies: Query<&mut Transform, (With<Enemy>, Without<Player>)>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
     let Ok(player_tf) = player.single() else {
         return;
     };
+    let player_pos = player_tf.translation;
 
     for mut enemy_tf in &mut enemies {
-        let mut to_player = player_tf.translation - enemy_tf.translation;
+        let mut to_player = player_pos - enemy_tf.translation;
         to_player.y = 0.0;
         let dist = to_player.length();
         if dist < KILL_DISTANCE {
@@ -96,11 +97,7 @@ fn enemy_update(
         let y = enemy_tf.translation.y;
         enemy_tf.translation.y = 0.9;
         enemy_tf.look_at(
-            Vec3::new(
-                player_tf.translation.x,
-                y,
-                player_tf.translation.z,
-            ),
+            Vec3::new(player_pos.x, y, player_pos.z),
             Vec3::Y,
         );
     }

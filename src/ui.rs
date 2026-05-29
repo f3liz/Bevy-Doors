@@ -25,14 +25,9 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, setup_ui)
-            .add_systems(OnEnter(GameState::Lobby), show_lobby_menu.after(crate::lobby::setup_lobby))
-            .add_systems(
-                OnEnter(GameState::GameOver),
-                (spawn_overlay_camera, show_game_over_menu).chain(),
-            )
+            .add_systems(OnEnter(GameState::GameOver), spawn_overlay_camera)
             .add_systems(OnExit(GameState::GameOver), despawn_overlay_camera)
-            .add_systems(OnEnter(GameState::Playing), show_hud_hide_menu)
-            .add_systems(Update, update_door_label.run_if(in_state(GameState::Playing)))
+            .add_systems(Update, sync_ui)
             .add_systems(Update, game_over_input.run_if(in_state(GameState::GameOver)));
     }
 }
@@ -106,74 +101,57 @@ pub fn setup_ui(mut commands: Commands) {
         });
 }
 
-fn show_lobby_menu(
-    mut hud: Query<&mut Visibility, (With<HudRoot>, Without<MenuRoot>)>,
-    mut menu: Query<&mut Visibility, (With<MenuRoot>, Without<HudRoot>)>,
-    mut menu_text: ParamSet<(
-        Query<&mut Text, With<MenuTitle>>,
-        Query<&mut Text, With<MenuSubtitle>>,
-    )>,
-) {
-    if let Ok(mut vis) = hud.single_mut() {
-        *vis = Visibility::Hidden;
-    }
-    if let Ok(mut vis) = menu.single_mut() {
-        *vis = Visibility::Visible;
-    }
-    if let Ok(mut text) = menu_text.p0().single_mut() {
-        **text = "Bevy Doors".to_string();
-    }
-    if let Ok(mut text) = menu_text.p1().single_mut() {
-        **text = "Press SPACE to enter the hotel".to_string();
-    }
-}
-
-fn show_game_over_menu(
-    mut hud: Query<&mut Visibility, (With<HudRoot>, Without<MenuRoot>)>,
-    mut menu: Query<&mut Visibility, (With<MenuRoot>, Without<HudRoot>)>,
+fn sync_ui(
+    state: Res<State<GameState>>,
     stats: Res<RunStats>,
-    mut menu_text: ParamSet<(
+    progress: Res<HallwayProgress>,
+    mut hud: Query<&mut Visibility, (With<HudRoot>, Without<MenuRoot>)>,
+    mut menu: Query<&mut Visibility, (With<MenuRoot>, Without<HudRoot>)>,
+    mut text_queries: ParamSet<(
+        Query<&mut Text, With<DoorLabel>>,
         Query<&mut Text, With<MenuTitle>>,
         Query<&mut Text, With<MenuSubtitle>>,
     )>,
 ) {
-    if let Ok(mut vis) = hud.single_mut() {
-        *vis = Visibility::Hidden;
-    }
-    if let Ok(mut vis) = menu.single_mut() {
-        *vis = Visibility::Visible;
-    }
-    if let Ok(mut text) = menu_text.p0().single_mut() {
-        **text = "You died".to_string();
-    }
-    if let Ok(mut text) = menu_text.p1().single_mut() {
-        **text = format!(
-            "Doors cleared: {}  —  Press SPACE for lobby",
-            stats.doors_cleared
-        );
-    }
-}
-
-fn show_hud_hide_menu(
-    mut hud: Query<&mut Visibility, (With<HudRoot>, Without<MenuRoot>)>,
-    mut menu: Query<&mut Visibility, (With<MenuRoot>, Without<HudRoot>)>,
-) {
-    if let Ok(mut vis) = hud.single_mut() {
-        *vis = Visibility::Visible;
-    }
-    if let Ok(mut vis) = menu.single_mut() {
-        *vis = Visibility::Hidden;
-    }
-}
-
-fn update_door_label(
-    progress: Res<HallwayProgress>,
-    mut label: Query<&mut Text, With<DoorLabel>>,
-) {
-    let Ok(mut text) = label.single_mut() else {
+    let Ok(mut hud_vis) = hud.single_mut() else {
         return;
     };
-    **text = format!("Door {}", progress.door_number);
+    let Ok(mut menu_vis) = menu.single_mut() else {
+        return;
+    };
+
+    match state.get() {
+        GameState::Playing => {
+            *hud_vis = Visibility::Visible;
+            *menu_vis = Visibility::Hidden;
+            if let Ok(mut text) = text_queries.p0().single_mut() {
+                **text = format!("Door {}", progress.door_number);
+            }
+        }
+        GameState::Lobby => {
+            *hud_vis = Visibility::Hidden;
+            *menu_vis = Visibility::Visible;
+            if let Ok(mut text) = text_queries.p1().single_mut() {
+                **text = "Bevy Doors".to_string();
+            }
+            if let Ok(mut text) = text_queries.p2().single_mut() {
+                **text = "Press SPACE to enter the hotel".to_string();
+            }
+        }
+        GameState::GameOver => {
+            *hud_vis = Visibility::Hidden;
+            *menu_vis = Visibility::Visible;
+            if let Ok(mut text) = text_queries.p1().single_mut() {
+                **text = "You died".to_string();
+            }
+            if let Ok(mut text) = text_queries.p2().single_mut() {
+                **text = format!(
+                    "Doors cleared: {}  —  Press SPACE for lobby",
+                    stats.doors_cleared
+                );
+            }
+        }
+    }
 }
 
 fn spawn_overlay_camera(mut commands: Commands) {

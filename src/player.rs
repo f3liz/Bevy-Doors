@@ -57,7 +57,10 @@ fn player_controls(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     mut mouse_motion: MessageReader<MouseMotion>,
-    mut player_query: Query<(&mut Transform, &mut PlayerLook), With<Player>>,
+    mut player_query: Query<
+        (&mut Transform, &mut PlayerLook),
+        (With<Player>, Without<PlayerCamera>),
+    >,
     mut camera_query: Query<&mut Transform, (With<PlayerCamera>, Without<Player>)>,
 ) {
     let Ok((mut transform, mut look)) = player_query.single_mut() else {
