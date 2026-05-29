@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game_state::{DoorPlacement, GameState, HallwayProgress, RunStats};
+use crate::game_state::{GameState, HallwayProgress, RunStats};
 use crate::hallway::spawn_hallway_segment;
 use crate::player::spawn_player;
 
@@ -132,7 +132,7 @@ fn lobby_start_input(
     }
 
     progress.door_number = 1;
-    progress.current_placement = DoorPlacement::for_door_number(1);
+    progress.room_seed = 0xC0FFEE;
     stats.doors_cleared = 0;
 
     spawn_player(&mut commands);
@@ -141,7 +141,7 @@ fn lobby_start_input(
         &mut meshes,
         &mut materials,
         progress.door_number,
-        progress.current_placement,
+        progress.room_seed,
     );
 
     next_state.set(GameState::Playing);

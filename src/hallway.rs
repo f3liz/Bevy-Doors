@@ -1,13 +1,14 @@
 use bevy::prelude::*;
 
-use crate::enemy::maybe_spawn_enemy_after_door;
-use crate::game_state::{DoorPlacement, GameState, HallwayProgress, RunStats};
-use crate::player::{Player, PlayerLook, PLAYER_EYE_HEIGHT, HALL_WIDTH};
+use crate::door::{self, Door, RoomLayout};
+use crate::game_state::{GameState, HallwayProgress};
+use crate::player::Player;
+use crate::transition::{start_room_transition, start_wrong_door_flash, RoomTransition, WrongDoorFlash};
 
+pub const HALL_WIDTH: f32 = 8.0;
 pub const HALL_LENGTH: f32 = 24.0;
 pub const HALL_HEIGHT: f32 = 4.0;
 pub const SIDE_DOOR_Z: f32 = 16.0;
-pub const AHEAD_DOOR_TRIGGER_Z: f32 = HALL_LENGTH - 4.0;
 
 #[derive(Component)]
 pub struct HallwayEntity;
@@ -18,7 +19,7 @@ impl Plugin for HallwayPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            advance_through_door
+            interact_with_doors
                 .in_set(crate::game_state::GameplaySystems::Door)
                 .run_if(in_state(GameState::Playing)),
         )
@@ -55,8 +56,10 @@ pub fn spawn_hallway_segment(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
     door_number: u32,
-    placement: DoorPlacement,
+    room_seed: u32,
 ) {
+    let layout = RoomLayout::generate(door_number, room_seed);
+
     let carpet = materials.add(StandardMaterial {
         base_color: Color::srgb(0.42, 0.14, 0.14),
         perceptual_roughness: 0.95,
@@ -79,18 +82,9 @@ pub fn spawn_hallway_segment(
         base_color: Color::srgb(0.3, 0.22, 0.14),
         ..default()
     });
-    let sign = materials.add(StandardMaterial {
+    let sign_wood = materials.add(StandardMaterial {
         base_color: Color::srgb(0.9, 0.85, 0.7),
-        emissive: LinearRgba::from(Color::srgb(
-            0.35 + (door_number as f32 * 0.02).min(0.2),
-            0.3,
-            0.15,
-        )),
-        ..default()
-    });
-    let guide = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.55, 0.45, 0.25),
-        emissive: LinearRgba::from(Color::srgb(0.15, 0.12, 0.05)),
+        emissive: LinearRgba::from(Color::srgb(0.35, 0.3, 0.15)),
         ..default()
     });
 
@@ -136,89 +130,17 @@ pub fn spawn_hallway_segment(
         ));
     }
 
-    match placement {
-        DoorPlacement::Ahead => {
-            commands.spawn((
-                HallwayEntity,
-                Mesh3d(box_mesh.clone()),
-                MeshMaterial3d(door_wood.clone()),
-                Transform::from_xyz(0.0, 1.4, HALL_LENGTH - 0.2).with_scale(Vec3::new(1.6, 2.8, 0.15)),
-            ));
-            commands.spawn((
-                HallwayEntity,
-                Mesh3d(box_mesh.clone()),
-                MeshMaterial3d(sign.clone()),
-                Transform::from_xyz(0.0, 2.2, HALL_LENGTH - 0.35).with_scale(Vec3::new(1.2, 0.5, 0.08)),
-            ));
-            commands.spawn((
-                HallwayEntity,
-                Mesh3d(box_mesh.clone()),
-                MeshMaterial3d(guide.clone()),
-                Transform::from_xyz(0.0, 0.02, HALL_LENGTH * 0.5).with_scale(Vec3::new(0.35, 0.02, HALL_LENGTH - 2.0)),
-            ));
-        }
-        DoorPlacement::Left => {
-            let wall_x = -half_w + 0.12;
-            commands.spawn((
-                HallwayEntity,
-                Mesh3d(box_mesh.clone()),
-                MeshMaterial3d(door_wood.clone()),
-                Transform::from_xyz(wall_x, 1.4, SIDE_DOOR_Z).with_scale(Vec3::new(0.12, 2.8, 1.6)),
-            ));
-            commands.spawn((
-                HallwayEntity,
-                Mesh3d(box_mesh.clone()),
-                MeshMaterial3d(sign.clone()),
-                Transform::from_xyz(wall_x + 0.18, 2.2, SIDE_DOOR_Z).with_scale(Vec3::new(0.08, 0.5, 1.0)),
-            ));
-            commands.spawn((
-                HallwayEntity,
-                Mesh3d(box_mesh.clone()),
-                MeshMaterial3d(guide.clone()),
-                Transform::from_xyz(-1.2, 0.02, SIDE_DOOR_Z).with_scale(Vec3::new(half_w - 0.8, 0.02, 0.35)),
-            ));
-            commands.spawn((
-                HallwayEntity,
-                PointLight {
-                    color: Color::srgb(1.0, 0.75, 0.45),
-                    intensity: 420_000.0,
-                    range: 10.0,
-                    ..default()
-                },
-                Transform::from_xyz(-2.5, 3.2, SIDE_DOOR_Z),
-            ));
-        }
-        DoorPlacement::Right => {
-            let wall_x = half_w - 0.12;
-            commands.spawn((
-                HallwayEntity,
-                Mesh3d(box_mesh.clone()),
-                MeshMaterial3d(door_wood.clone()),
-                Transform::from_xyz(wall_x, 1.4, SIDE_DOOR_Z).with_scale(Vec3::new(0.12, 2.8, 1.6)),
-            ));
-            commands.spawn((
-                HallwayEntity,
-                Mesh3d(box_mesh.clone()),
-                MeshMaterial3d(sign.clone()),
-                Transform::from_xyz(wall_x - 0.18, 2.2, SIDE_DOOR_Z).with_scale(Vec3::new(0.08, 0.5, 1.0)),
-            ));
-            commands.spawn((
-                HallwayEntity,
-                Mesh3d(box_mesh.clone()),
-                MeshMaterial3d(guide.clone()),
-                Transform::from_xyz(1.2, 0.02, SIDE_DOOR_Z).with_scale(Vec3::new(half_w - 0.8, 0.02, 0.35)),
-            ));
-            commands.spawn((
-                HallwayEntity,
-                PointLight {
-                    color: Color::srgb(1.0, 0.75, 0.45),
-                    intensity: 420_000.0,
-                    range: 10.0,
-                    ..default()
-                },
-                Transform::from_xyz(2.5, 3.2, SIDE_DOOR_Z),
-            ));
-        }
+    for door in &layout.doors {
+        door::spawn_door(
+            commands,
+            meshes,
+            materials,
+            door,
+            layout.target_number,
+            &box_mesh,
+            &door_wood,
+            &sign_wood,
+        );
     }
 
     for i in 0..3 {
@@ -233,74 +155,40 @@ pub fn spawn_hallway_segment(
             Transform::from_xyz(0.0, 3.4, 4.0 + i as f32 * 7.0),
         ));
     }
+
+    let _ = layout;
 }
 
-fn player_reached_door(player: &Transform, placement: DoorPlacement) -> bool {
-    let half_w = HALL_WIDTH * 0.5;
-    match placement {
-        DoorPlacement::Ahead => {
-            player.translation.z >= AHEAD_DOOR_TRIGGER_Z && player.translation.x.abs() < 1.8
-        }
-        DoorPlacement::Left => {
-            player.translation.x <= -half_w + 1.8
-                && (player.translation.z - SIDE_DOOR_Z).abs() < 2.2
-        }
-        DoorPlacement::Right => {
-            player.translation.x >= half_w - 1.8
-                && (player.translation.z - SIDE_DOOR_Z).abs() < 2.2
-        }
-    }
-}
-
-fn advance_through_door(
-    mut commands: Commands,
-    mut player: Query<(&mut Transform, &mut PlayerLook), With<Player>>,
-    mut cameras: Query<
-        &mut Transform,
-        (With<crate::player::PlayerCamera>, Without<Player>),
-    >,
-    mut progress: ResMut<HallwayProgress>,
-    mut stats: ResMut<RunStats>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    hallway: Query<Entity, With<HallwayEntity>>,
-    enemies: Query<Entity, With<crate::enemy::Enemy>>,
+pub fn interact_with_doors(
+    player: Query<&Transform, With<Player>>,
+    doors: Query<&Door, With<door::DoorFrame>>,
+    progress: Res<HallwayProgress>,
+    mut transition: ResMut<RoomTransition>,
+    mut flash: ResMut<WrongDoorFlash>,
+    keys: Res<ButtonInput<KeyCode>>,
 ) {
-    let Ok((mut player_tf, mut look)) = player.single_mut() else {
+    if transition.active {
+        return;
+    }
+
+    if !keys.just_pressed(KeyCode::KeyE) && !keys.just_pressed(KeyCode::Space) {
+        return;
+    }
+
+    let Ok(player_tf) = player.single() else {
         return;
     };
 
-    if !player_reached_door(&player_tf, progress.current_placement) {
+    for door in &doors {
+        if !door::player_at_door(player_tf, door.placement) {
+            continue;
+        }
+
+        if door.number == progress.door_number {
+            start_room_transition(&mut transition);
+        } else {
+            start_wrong_door_flash(&mut flash);
+        }
         return;
     }
-
-    stats.doors_cleared += 1;
-    progress.door_number += 1;
-    progress.current_placement = DoorPlacement::for_door_number(progress.door_number);
-
-    for entity in &hallway {
-        commands.entity(entity).despawn();
-    }
-
-    player_tf.translation = Vec3::new(0.0, PLAYER_EYE_HEIGHT, 2.0);
-    player_tf.rotation = Quat::IDENTITY;
-    look.pitch = 0.0;
-    if let Ok(mut camera_tf) = cameras.single_mut() {
-        camera_tf.rotation = Quat::IDENTITY;
-    }
-
-    spawn_hallway_segment(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        progress.door_number,
-        progress.current_placement,
-    );
-    maybe_spawn_enemy_after_door(
-        &mut commands,
-        &mut meshes,
-        &mut materials,
-        &enemies,
-        progress.door_number,
-    );
 }

@@ -1,9 +1,11 @@
+mod door;
 mod enemy;
 mod game_state;
 mod hallway;
 mod jumpscare;
 mod lobby;
 mod player;
+mod transition;
 mod ui;
 
 use bevy::prelude::*;
@@ -42,6 +44,7 @@ fn main() {
             player::PlayerPlugin,
             lobby::LobbyPlugin,
             hallway::HallwayPlugin,
+            transition::TransitionPlugin,
             enemy::EnemyPlugin,
             jumpscare::JumpscarePlugin,
             ui::UiPlugin,

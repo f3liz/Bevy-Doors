@@ -3,11 +3,15 @@ use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 use crate::game_state::GameState;
+use crate::transition::RoomTransition;
 
-pub const HALL_WIDTH: f32 = 8.0;
+use crate::hallway::HALL_WIDTH;
+
 pub const PLAYER_EYE_HEIGHT: f32 = 1.6;
 pub const MOVE_SPEED: f32 = 5.5;
 pub const MOUSE_SENSITIVITY: f32 = 0.002;
+const MOVE_SMOOTHING: f32 = 14.0;
+const LOOK_SMOOTHING: f32 = 22.0;
 
 #[derive(Component)]
 pub struct Player;
@@ -17,7 +21,15 @@ pub struct PlayerCamera;
 
 #[derive(Component, Default)]
 pub struct PlayerLook {
+    pub yaw: f32,
     pub pitch: f32,
+    pub yaw_velocity: f32,
+    pub pitch_velocity: f32,
+}
+
+#[derive(Component, Default)]
+pub struct PlayerMotion {
+    pub velocity: Vec3,
 }
 
 pub struct PlayerPlugin;
@@ -39,6 +51,7 @@ pub fn spawn_player(commands: &mut Commands) {
         .spawn((
             Player,
             PlayerLook::default(),
+            PlayerMotion::default(),
             Transform::from_xyz(0.0, PLAYER_EYE_HEIGHT, 2.0),
             Visibility::default(),
             InheritedVisibility::default(),
@@ -57,36 +70,50 @@ pub fn spawn_player(commands: &mut Commands) {
 fn player_controls(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
+    transition: Res<RoomTransition>,
     mut mouse_motion: MessageReader<MouseMotion>,
     mut player_query: Query<
-        (&mut Transform, &mut PlayerLook),
+        (&mut Transform, &mut PlayerLook, &mut PlayerMotion),
         (With<Player>, Without<PlayerCamera>),
     >,
     mut camera_query: Query<&mut Transform, (With<PlayerCamera>, Without<Player>)>,
 ) {
-    let Ok((mut transform, mut look)) = player_query.single_mut() else {
+    let Ok((mut transform, mut look, mut motion)) = player_query.single_mut() else {
         return;
     };
 
-    let mut direction = Vec3::ZERO;
-    if keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp) {
-        direction += transform.forward().as_vec3();
-    }
-    if keys.pressed(KeyCode::KeyS) || keys.pressed(KeyCode::ArrowDown) {
-        direction -= transform.forward().as_vec3();
-    }
-    if keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft) {
-        direction -= transform.right().as_vec3();
-    }
-    if keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight) {
-        direction += transform.right().as_vec3();
+    let dt = time.delta_secs();
+    let blocked = transition.active;
+
+    if !blocked {
+        let mut direction = Vec3::ZERO;
+        if keys.pressed(KeyCode::KeyW) || keys.pressed(KeyCode::ArrowUp) {
+            direction += transform.forward().as_vec3();
+        }
+        if keys.pressed(KeyCode::KeyS) || keys.pressed(KeyCode::ArrowDown) {
+            direction -= transform.forward().as_vec3();
+        }
+        if keys.pressed(KeyCode::KeyA) || keys.pressed(KeyCode::ArrowLeft) {
+            direction -= transform.right().as_vec3();
+        }
+        if keys.pressed(KeyCode::KeyD) || keys.pressed(KeyCode::ArrowRight) {
+            direction += transform.right().as_vec3();
+        }
+
+        direction.y = 0.0;
+        let target_velocity = if direction.length_squared() > 0.0 {
+            direction.normalize() * MOVE_SPEED
+        } else {
+            Vec3::ZERO
+        };
+
+        let blend = 1.0 - (-MOVE_SMOOTHING * dt).exp();
+        motion.velocity = motion.velocity.lerp(target_velocity, blend);
+    } else {
+        motion.velocity = Vec3::ZERO;
     }
 
-    direction.y = 0.0;
-    if direction.length_squared() > 0.0 {
-        direction = direction.normalize();
-        transform.translation += direction * MOVE_SPEED * time.delta_secs();
-    }
+    transform.translation += motion.velocity * dt;
 
     let half_w = HALL_WIDTH * 0.5 - 0.4;
     transform.translation.x = transform.translation.x.clamp(-half_w, half_w);
@@ -96,18 +123,26 @@ fn player_controls(
         return;
     };
 
-    let mut delta = Vec2::ZERO;
-    for event in mouse_motion.read() {
-        delta += event.delta;
-    }
-    if delta == Vec2::ZERO {
-        return;
+    if !blocked {
+        let mut delta = Vec2::ZERO;
+        for event in mouse_motion.read() {
+            delta += event.delta;
+        }
+
+        if delta != Vec2::ZERO {
+            look.yaw_velocity -= delta.x * MOUSE_SENSITIVITY * 60.0;
+            look.pitch_velocity -= delta.y * MOUSE_SENSITIVITY * 60.0;
+        }
     }
 
-    look.pitch -= delta.y * MOUSE_SENSITIVITY;
+    let look_blend = 1.0 - (-LOOK_SMOOTHING * dt).exp();
+    look.yaw += look.yaw_velocity * look_blend;
+    look.pitch += look.pitch_velocity * look_blend;
     look.pitch = look.pitch.clamp(-1.4, 1.4);
+    look.yaw_velocity *= 1.0 - look_blend;
+    look.pitch_velocity *= 1.0 - look_blend;
 
-    transform.rotate_y(-delta.x * MOUSE_SENSITIVITY);
+    transform.rotation = Quat::from_rotation_y(look.yaw);
     camera_transform.rotation = Quat::from_rotation_x(look.pitch);
 }
 
