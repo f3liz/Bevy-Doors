@@ -52,7 +52,7 @@ fn reset_jumpscare_timer(mut timer: ResMut<JumpscareTimer>, mut active: ResMut<A
 fn jumpscare_countdown(
     time: Res<Time>,
     mut timer: ResMut<JumpscareTimer>,
-    active: Res<ActiveJumpscare>,
+    mut active: ResMut<ActiveJumpscare>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -69,6 +69,7 @@ fn jumpscare_countdown(
 
     timer.elapsed = 0.0;
     timer.next_in = 18.0 + (timer.next_in % 12.0);
+    active.remaining = 0.45;
 
     commands
         .spawn((
@@ -122,7 +123,7 @@ fn tick_active_jumpscare(
     }
 
     if active.remaining <= 0.0 {
-        active.remaining = 0.45;
+        return;
     }
 
     active.remaining -= time.delta_secs();

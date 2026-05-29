@@ -29,6 +29,7 @@ fn cleanup_playing_world(
     hallway: Query<Entity, With<HallwayEntity>>,
     player: Query<Entity, With<Player>>,
     enemies: Query<Entity, With<crate::enemy::Enemy>>,
+    cameras: Query<Entity, With<crate::player::PlayerCamera>>,
 ) {
     for entity in &hallway {
         commands.entity(entity).despawn();
@@ -36,8 +37,11 @@ fn cleanup_playing_world(
     for entity in &enemies {
         commands.entity(entity).despawn();
     }
+    for entity in &cameras {
+        commands.entity(entity).despawn();
+    }
     for entity in &player {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 

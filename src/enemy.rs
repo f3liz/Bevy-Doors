@@ -68,12 +68,6 @@ pub fn maybe_spawn_enemy_after_door(
     );
 }
 
-pub fn despawn_enemies(mut commands: Commands, enemies: Query<Entity, With<Enemy>>) {
-    for entity in &enemies {
-        commands.entity(entity).despawn();
-    }
-}
-
 fn enemy_chase(
     time: Res<Time>,
     player: Query<&Transform, With<Player>>,
@@ -92,11 +86,12 @@ fn enemy_chase(
         }
         to_player /= dist;
         enemy_tf.translation += to_player * ENEMY_SPEED * time.delta_secs();
+        let y = enemy_tf.translation.y;
         enemy_tf.translation.y = 0.9;
         enemy_tf.look_at(
             Vec3::new(
                 player_tf.translation.x,
-                enemy_tf.translation.y,
+                y,
                 player_tf.translation.z,
             ),
             Vec3::Y,

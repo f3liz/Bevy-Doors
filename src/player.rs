@@ -134,12 +134,3 @@ fn escape_releases_cursor(
     cursor.grab_mode = CursorGrabMode::None;
     cursor.visible = true;
 }
-
-pub fn despawn_player(
-    mut commands: Commands,
-    query: Query<Entity, With<Player>>,
-) {
-    for entity in &query {
-        commands.entity(entity).despawn();
-    }
-}
