@@ -38,7 +38,9 @@ impl Plugin for JumpscarePlugin {
             .add_systems(OnEnter(GameState::Playing), reset_jumpscare_timer)
             .add_systems(
                 Update,
-                (jumpscare_countdown, tick_active_jumpscare).run_if(in_state(GameState::Playing)),
+                jumpscare_system
+                    .in_set(crate::game_state::GameplaySystems::Jumpscare)
+                    .run_if(in_state(GameState::Playing)),
             )
             .add_systems(OnExit(GameState::Playing), cleanup_jumpscare);
     }
@@ -49,7 +51,7 @@ fn reset_jumpscare_timer(mut timer: ResMut<JumpscareTimer>, mut active: ResMut<A
     *active = ActiveJumpscare::default();
 }
 
-fn jumpscare_countdown(
+fn jumpscare_system(
     time: Res<Time>,
     mut timer: ResMut<JumpscareTimer>,
     mut active: ResMut<ActiveJumpscare>,
@@ -57,8 +59,25 @@ fn jumpscare_countdown(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     cameras: Query<Entity, With<PlayerCamera>>,
+    overlay: Query<Entity, With<JumpscareOverlay>>,
+    faces: Query<Entity, With<JumpscareFace>>,
 ) {
-    if active.remaining > 0.0 {
+    if !overlay.is_empty() || !faces.is_empty() {
+        if active.remaining <= 0.0 {
+            return;
+        }
+
+        active.remaining -= time.delta_secs();
+        if active.remaining > 0.0 {
+            return;
+        }
+
+        for entity in &overlay {
+            commands.entity(entity).despawn();
+        }
+        for entity in &faces {
+            commands.entity(entity).despawn();
+        }
         return;
     }
 
@@ -111,35 +130,7 @@ fn jumpscare_countdown(
     }
 }
 
-fn tick_active_jumpscare(
-    time: Res<Time>,
-    mut active: ResMut<ActiveJumpscare>,
-    mut commands: Commands,
-    overlay: Query<Entity, With<JumpscareOverlay>>,
-    faces: Query<Entity, With<JumpscareFace>>,
-) {
-    if overlay.is_empty() && faces.is_empty() {
-        return;
-    }
-
-    if active.remaining <= 0.0 {
-        return;
-    }
-
-    active.remaining -= time.delta_secs();
-    if active.remaining > 0.0 {
-        return;
-    }
-
-    for entity in &overlay {
-        commands.entity(entity).despawn();
-    }
-    for entity in &faces {
-        commands.entity(entity).despawn();
-    }
-}
-
-fn cleanup_jumpscare(
+pub fn cleanup_jumpscare(
     mut commands: Commands,
     overlay: Query<Entity, With<JumpscareOverlay>>,
     faces: Query<Entity, With<JumpscareFace>>,

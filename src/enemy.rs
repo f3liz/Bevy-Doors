@@ -17,7 +17,9 @@ impl Plugin for EnemyPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (enemy_chase, enemy_kill_player).run_if(in_state(GameState::Playing)),
+            enemy_update
+                .in_set(crate::game_state::GameplaySystems::Enemy)
+                .run_if(in_state(GameState::Playing)),
         );
     }
 }
@@ -68,10 +70,11 @@ pub fn maybe_spawn_enemy_after_door(
     );
 }
 
-fn enemy_chase(
+fn enemy_update(
     time: Res<Time>,
     player: Query<&Transform, With<Player>>,
     mut enemies: Query<&mut Transform, With<Enemy>>,
+    mut next_state: ResMut<NextState<GameState>>,
 ) {
     let Ok(player_tf) = player.single() else {
         return;
@@ -81,6 +84,10 @@ fn enemy_chase(
         let mut to_player = player_tf.translation - enemy_tf.translation;
         to_player.y = 0.0;
         let dist = to_player.length();
+        if dist < KILL_DISTANCE {
+            next_state.set(GameState::GameOver);
+            return;
+        }
         if dist < 0.05 {
             continue;
         }
@@ -96,26 +103,5 @@ fn enemy_chase(
             ),
             Vec3::Y,
         );
-    }
-}
-
-fn enemy_kill_player(
-    player: Query<&Transform, With<Player>>,
-    enemies: Query<&Transform, With<Enemy>>,
-    mut next_state: ResMut<NextState<GameState>>,
-) {
-    let Ok(player_tf) = player.single() else {
-        return;
-    };
-
-    for enemy_tf in &enemies {
-        let flat = Vec2::new(
-            player_tf.translation.x - enemy_tf.translation.x,
-            player_tf.translation.z - enemy_tf.translation.z,
-        );
-        if flat.length() < KILL_DISTANCE {
-            next_state.set(GameState::GameOver);
-            return;
-        }
     }
 }

@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 use crate::game_state::{GameState, HallwayProgress, RunStats};
 use crate::hallway::spawn_hallway_segment;
@@ -19,13 +18,12 @@ impl Plugin for LobbyPlugin {
             .add_systems(OnExit(GameState::Lobby), cleanup_lobby)
             .add_systems(
                 Update,
-                (lobby_start_input, release_cursor_in_lobby)
-                    .run_if(in_state(GameState::Lobby)),
+                lobby_start_input.run_if(in_state(GameState::Lobby)),
             );
     }
 }
 
-fn setup_lobby(
+pub fn setup_lobby(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -139,12 +137,4 @@ fn lobby_start_input(
     spawn_hallway_segment(&mut commands, &mut meshes, &mut materials, progress.door_number);
 
     next_state.set(GameState::Playing);
-}
-
-fn release_cursor_in_lobby(mut window_query: Query<&mut CursorOptions, With<PrimaryWindow>>) {
-    let Ok(mut cursor) = window_query.single_mut() else {
-        return;
-    };
-    cursor.grab_mode = CursorGrabMode::None;
-    cursor.visible = true;
 }

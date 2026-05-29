@@ -8,6 +8,14 @@ pub enum GameState {
     GameOver,
 }
 
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum GameplaySystems {
+    Player,
+    Door,
+    Enemy,
+    Jumpscare,
+}
+
 #[derive(Resource, Default)]
 pub struct RunStats {
     pub doors_cleared: u32,

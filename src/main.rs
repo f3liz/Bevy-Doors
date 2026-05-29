@@ -9,7 +9,7 @@ mod ui;
 use bevy::prelude::*;
 use bevy::window::{PresentMode, WindowResolution};
 
-use game_state::{GameState, HallwayProgress, RunStats};
+use game_state::{GameState, GameplaySystems, HallwayProgress, RunStats};
 
 fn main() {
     App::new()
@@ -27,6 +27,17 @@ fn main() {
         .init_state::<GameState>()
         .init_resource::<RunStats>()
         .init_resource::<HallwayProgress>()
+        .configure_sets(
+            Update,
+            (
+                GameplaySystems::Player,
+                GameplaySystems::Door,
+                GameplaySystems::Enemy,
+                GameplaySystems::Jumpscare,
+            )
+                .chain()
+                .run_if(in_state(GameState::Playing)),
+        )
         .add_plugins((
             player::PlayerPlugin,
             lobby::LobbyPlugin,
@@ -35,7 +46,7 @@ fn main() {
             jumpscare::JumpscarePlugin,
             ui::UiPlugin,
         ))
-        .add_systems(Startup, setup_scene)
+        .add_systems(Startup, setup_scene.after(ui::setup_ui))
         .run();
 }
 

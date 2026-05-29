@@ -2,9 +2,8 @@ use bevy::prelude::*;
 
 use crate::enemy::maybe_spawn_enemy_after_door;
 use crate::game_state::{GameState, HallwayProgress, RunStats};
-use crate::player::{Player, PLAYER_EYE_HEIGHT};
+use crate::player::{Player, PLAYER_EYE_HEIGHT, HALL_WIDTH};
 
-pub const HALL_WIDTH: f32 = 8.0;
 pub const HALL_LENGTH: f32 = 24.0;
 pub const HALL_HEIGHT: f32 = 4.0;
 pub const DOOR_TRIGGER_Z: f32 = HALL_LENGTH - 4.0;
@@ -18,9 +17,14 @@ impl Plugin for HallwayPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (advance_through_door, clamp_player_in_hall).run_if(in_state(GameState::Playing)),
+            advance_through_door
+                .in_set(crate::game_state::GameplaySystems::Door)
+                .run_if(in_state(GameState::Playing)),
         )
-        .add_systems(OnExit(GameState::Playing), cleanup_playing_world);
+        .add_systems(
+            OnExit(GameState::Playing),
+            cleanup_playing_world.after(crate::jumpscare::cleanup_jumpscare),
+        );
     }
 }
 
@@ -194,13 +198,4 @@ fn advance_through_door(
         &enemies,
         progress.door_number,
     );
-}
-
-fn clamp_player_in_hall(mut player: Query<&mut Transform, With<Player>>) {
-    let Ok(mut tf) = player.single_mut() else {
-        return;
-    };
-    let half_w = HALL_WIDTH * 0.5 - 0.4;
-    tf.translation.x = tf.translation.x.clamp(-half_w, half_w);
-    tf.translation.y = PLAYER_EYE_HEIGHT;
 }

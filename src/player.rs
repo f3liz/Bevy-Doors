@@ -1,8 +1,10 @@
+use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::window::{CursorGrabMode, CursorOptions, PrimaryWindow};
 
 use crate::game_state::GameState;
 
+pub const HALL_WIDTH: f32 = 8.0;
 pub const PLAYER_EYE_HEIGHT: f32 = 1.6;
 pub const MOVE_SPEED: f32 = 5.5;
 pub const MOUSE_SENSITIVITY: f32 = 0.002;
@@ -24,14 +26,11 @@ impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (
-                player_movement,
-                player_look,
-                cursor_grab_on_playing,
-                escape_releases_cursor,
-            )
+            player_controls
+                .in_set(crate::game_state::GameplaySystems::Player)
                 .run_if(in_state(GameState::Playing)),
-        );
+        )
+        .add_systems(Update, cursor_control);
     }
 }
 
@@ -54,12 +53,14 @@ pub fn spawn_player(commands: &mut Commands) {
         });
 }
 
-fn player_movement(
+fn player_controls(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
-    mut query: Query<&mut Transform, With<Player>>,
+    mut mouse_motion: MessageReader<MouseMotion>,
+    mut player_query: Query<(&mut Transform, &mut PlayerLook), With<Player>>,
+    mut camera_query: Query<&mut Transform, (With<PlayerCamera>, Without<Player>)>,
 ) {
-    let Ok(mut transform) = query.single_mut() else {
+    let Ok((mut transform, mut look)) = player_query.single_mut() else {
         return;
     };
 
@@ -82,16 +83,11 @@ fn player_movement(
         direction = direction.normalize();
         transform.translation += direction * MOVE_SPEED * time.delta_secs();
     }
-}
 
-fn player_look(
-    mut mouse_motion: MessageReader<bevy::input::mouse::MouseMotion>,
-    mut player_query: Query<(&mut Transform, &mut PlayerLook), With<Player>>,
-    mut camera_query: Query<&mut Transform, (With<PlayerCamera>, Without<Player>)>,
-) {
-    let Ok((mut player_transform, mut look)) = player_query.single_mut() else {
-        return;
-    };
+    let half_w = HALL_WIDTH * 0.5 - 0.4;
+    transform.translation.x = transform.translation.x.clamp(-half_w, half_w);
+    transform.translation.y = PLAYER_EYE_HEIGHT;
+
     let Ok(mut camera_transform) = camera_query.single_mut() else {
         return;
     };
@@ -107,30 +103,32 @@ fn player_look(
     look.pitch -= delta.y * MOUSE_SENSITIVITY;
     look.pitch = look.pitch.clamp(-1.4, 1.4);
 
-    player_transform.rotate_y(-delta.x * MOUSE_SENSITIVITY);
+    transform.rotate_y(-delta.x * MOUSE_SENSITIVITY);
     camera_transform.rotation = Quat::from_rotation_x(look.pitch);
 }
 
-fn cursor_grab_on_playing(
-    mut window_query: Query<&mut CursorOptions, With<PrimaryWindow>>,
-) {
-    let Ok(mut cursor) = window_query.single_mut() else {
-        return;
-    };
-    cursor.grab_mode = CursorGrabMode::Locked;
-    cursor.visible = false;
-}
-
-fn escape_releases_cursor(
+fn cursor_control(
+    state: Res<State<GameState>>,
     keys: Res<ButtonInput<KeyCode>>,
     mut window_query: Query<&mut CursorOptions, With<PrimaryWindow>>,
 ) {
-    if !keys.just_pressed(KeyCode::Escape) {
-        return;
-    }
     let Ok(mut cursor) = window_query.single_mut() else {
         return;
     };
-    cursor.grab_mode = CursorGrabMode::None;
-    cursor.visible = true;
+
+    match state.get() {
+        GameState::Playing => {
+            if keys.just_pressed(KeyCode::Escape) {
+                cursor.grab_mode = CursorGrabMode::None;
+                cursor.visible = true;
+            } else {
+                cursor.grab_mode = CursorGrabMode::Locked;
+                cursor.visible = false;
+            }
+        }
+        GameState::Lobby | GameState::GameOver => {
+            cursor.grab_mode = CursorGrabMode::None;
+            cursor.visible = true;
+        }
+    }
 }
