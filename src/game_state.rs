@@ -14,11 +14,37 @@ pub enum GameplaySystems {
     Door,
     Enemy,
     Jumpscare,
+    Animation,
 }
 
 #[derive(Resource, Default)]
 pub struct RunStats {
     pub doors_cleared: u32,
+}
+
+pub const MAX_LIVES: u32 = 3;
+pub const HIT_COOLDOWN: f32 = 1.25;
+
+#[derive(Resource)]
+pub struct PlayerHealth {
+    pub lives: u32,
+    pub hit_cooldown: f32,
+}
+
+impl Default for PlayerHealth {
+    fn default() -> Self {
+        Self {
+            lives: MAX_LIVES,
+            hit_cooldown: 0.0,
+        }
+    }
+}
+
+impl PlayerHealth {
+    pub fn reset(&mut self) {
+        self.lives = MAX_LIVES;
+        self.hit_cooldown = 0.0;
+    }
 }
 
 #[derive(Resource)]

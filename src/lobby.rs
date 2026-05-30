@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::game_state::{GameState, HallwayProgress, RunStats};
+use crate::game_state::{GameState, HallwayProgress, PlayerHealth, RunStats};
 use crate::hallway::spawn_hallway_segment;
 use crate::player::spawn_player;
 
@@ -16,6 +16,7 @@ impl Plugin for LobbyPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(OnEnter(GameState::Lobby), setup_lobby)
             .add_systems(OnExit(GameState::Lobby), cleanup_lobby)
+            .add_systems(OnEnter(GameState::Playing), start_run)
             .add_systems(
                 Update,
                 lobby_start_input.run_if(in_state(GameState::Lobby)),
@@ -121,11 +122,9 @@ fn cleanup_lobby(
 fn lobby_start_input(
     keys: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,
-    mut commands: Commands,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
     mut progress: ResMut<HallwayProgress>,
     mut stats: ResMut<RunStats>,
+    mut health: ResMut<PlayerHealth>,
 ) {
     if !keys.just_pressed(KeyCode::Space) {
         return;
@@ -134,6 +133,21 @@ fn lobby_start_input(
     progress.door_number = 1;
     progress.room_seed = 0xC0FFEE;
     stats.doors_cleared = 0;
+    health.reset();
+
+    next_state.set(GameState::Playing);
+}
+
+fn start_run(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    progress: Res<HallwayProgress>,
+    existing_player: Query<Entity, With<crate::player::Player>>,
+) {
+    if !existing_player.is_empty() {
+        return;
+    }
 
     spawn_player(&mut commands);
     spawn_hallway_segment(
@@ -143,6 +157,4 @@ fn lobby_start_input(
         progress.door_number,
         progress.room_seed,
     );
-
-    next_state.set(GameState::Playing);
 }

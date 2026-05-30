@@ -11,7 +11,7 @@ mod ui;
 use bevy::prelude::*;
 use bevy::window::{PresentMode, WindowResolution};
 
-use game_state::{GameState, GameplaySystems, HallwayProgress, RunStats};
+use game_state::{GameState, GameplaySystems, HallwayProgress, PlayerHealth, RunStats};
 
 fn main() {
     App::new()
@@ -28,6 +28,7 @@ fn main() {
         )
         .init_state::<GameState>()
         .init_resource::<RunStats>()
+        .init_resource::<PlayerHealth>()
         .init_resource::<HallwayProgress>()
         .configure_sets(
             Update,
@@ -36,6 +37,7 @@ fn main() {
                 GameplaySystems::Door,
                 GameplaySystems::Enemy,
                 GameplaySystems::Jumpscare,
+                GameplaySystems::Animation,
             )
                 .chain()
                 .run_if(in_state(GameState::Playing)),

@@ -88,6 +88,9 @@ pub fn spawn_door(
 ) {
     let half_w = HALL_WIDTH * 0.5;
 
+const WALL_HALF: f32 = 0.125;
+const DOOR_HALF_DEPTH: f32 = 0.06;
+
     let (frame_pos, leaf_scale, sign_local, text_local, hinge_rotation) = match door.placement {
         DoorPlacement::Ahead => (
             Vec3::new(0.0, 1.4, HALL_LENGTH - 0.2),
@@ -97,14 +100,14 @@ pub fn spawn_door(
             Quat::from_rotation_y(std::f32::consts::PI),
         ),
         DoorPlacement::Left => (
-            Vec3::new(-half_w + 0.12, 1.4, SIDE_DOOR_Z),
+            Vec3::new(-half_w + WALL_HALF + DOOR_HALF_DEPTH, 1.4, SIDE_DOOR_Z),
             Vec3::new(0.12, 2.8, 1.6),
             Vec3::new(0.28, 1.15, 0.0),
             Vec3::new(0.36, 1.15, 0.0),
             Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
         ),
         DoorPlacement::Right => (
-            Vec3::new(half_w - 0.12, 1.4, SIDE_DOOR_Z),
+            Vec3::new(half_w - WALL_HALF - DOOR_HALF_DEPTH, 1.4, SIDE_DOOR_Z),
             Vec3::new(0.12, 2.8, 1.6),
             Vec3::new(-0.28, 1.15, 0.0),
             Vec3::new(-0.36, 1.15, 0.0),
@@ -160,19 +163,17 @@ pub fn spawn_door(
     });
 }
 
-pub fn player_at_door(player: &Transform, placement: DoorPlacement) -> bool {
+pub fn player_at_door(position: Vec3, placement: DoorPlacement) -> bool {
     let half_w = HALL_WIDTH * 0.5;
     match placement {
         DoorPlacement::Ahead => {
-            player.translation.z >= HALL_LENGTH - 4.0 && player.translation.x.abs() < 1.8
+            position.z >= HALL_LENGTH - 4.0 && position.x.abs() < 1.8
         }
         DoorPlacement::Left => {
-            player.translation.x <= -half_w + 1.8
-                && (player.translation.z - SIDE_DOOR_Z).abs() < 2.2
+            position.x <= -half_w + 1.8 && (position.z - SIDE_DOOR_Z).abs() < 2.2
         }
         DoorPlacement::Right => {
-            player.translation.x >= half_w - 1.8
-                && (player.translation.z - SIDE_DOOR_Z).abs() < 2.2
+            position.x >= half_w - 1.8 && (position.z - SIDE_DOOR_Z).abs() < 2.2
         }
     }
 }

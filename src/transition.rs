@@ -4,7 +4,7 @@ use crate::door::{Door, DoorLeaf, DoorOpen};
 use crate::enemy::maybe_spawn_enemy_after_door;
 use crate::game_state::{GameState, HallwayProgress, RunStats};
 use crate::hallway::{spawn_hallway_segment, HallwayEntity};
-use crate::player::{Player, PlayerLook, PLAYER_EYE_HEIGHT};
+use crate::player::{Player, PlayerLook, PLAYER_EYE_HEIGHT, reset_player_into_room};
 
 #[derive(Resource, Default)]
 pub struct RoomTransition {
@@ -30,18 +30,26 @@ pub struct WrongDoorFlash {
     pub remaining: f32,
 }
 
+#[derive(Resource, Default)]
+pub struct DoorContactCooldown {
+    pub remaining: f32,
+}
+
+const FADE_DURATION: f32 = 0.55;
+
 pub struct TransitionPlugin;
 
 impl Plugin for TransitionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RoomTransition>()
             .init_resource::<WrongDoorFlash>()
+            .init_resource::<DoorContactCooldown>()
             .add_systems(
                 Update,
                 (
                     tick_wrong_door_flash,
                     update_fade_overlay,
-                    animate_doors,
+                    animate_doors.in_set(crate::game_state::GameplaySystems::Animation),
                 )
                     .run_if(in_state(GameState::Playing)),
             )
@@ -49,7 +57,7 @@ impl Plugin for TransitionPlugin {
                 Update,
                 tick_room_transition
                     .in_set(crate::game_state::GameplaySystems::Door)
-                    .after(crate::hallway::interact_with_doors)
+                    .after(crate::hallway::check_doors_on_contact)
                     .run_if(in_state(GameState::Playing)),
             );
     }
@@ -84,6 +92,7 @@ fn tick_room_transition(
     mut stats: ResMut<RunStats>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    tung_assets: Res<crate::enemy::TungModelAssets>,
     hallway: Query<Entity, With<HallwayEntity>>,
     enemies: Query<Entity, With<crate::enemy::Enemy>>,
 ) {
@@ -94,7 +103,7 @@ fn tick_room_transition(
     transition.timer += time.delta_secs();
 
     match transition.phase {
-        TransitionPhase::FadeOut if transition.timer >= 0.35 => {
+        TransitionPhase::FadeOut if transition.timer >= FADE_DURATION => {
             transition.phase = TransitionPhase::Swap;
             transition.timer = 0.0;
 
@@ -111,11 +120,7 @@ fn tick_room_transition(
 
             if let Ok((mut player_tf, mut look)) = player.single_mut() {
                 player_tf.translation = Vec3::new(0.0, PLAYER_EYE_HEIGHT, 2.0);
-                player_tf.rotation = Quat::IDENTITY;
-                look.yaw = 0.0;
-                look.pitch = 0.0;
-                look.yaw_velocity = 0.0;
-                look.pitch_velocity = 0.0;
+                reset_player_into_room(&mut player_tf, &mut look, None);
             }
             if let Ok(mut camera_tf) = cameras.single_mut() {
                 camera_tf.rotation = Quat::IDENTITY;
@@ -130,8 +135,7 @@ fn tick_room_transition(
             );
             maybe_spawn_enemy_after_door(
                 &mut commands,
-                &mut meshes,
-                &mut materials,
+                &tung_assets,
                 &enemies,
                 progress.door_number,
             );
@@ -140,7 +144,7 @@ fn tick_room_transition(
             transition.phase = TransitionPhase::FadeIn;
             transition.timer = 0.0;
         }
-        TransitionPhase::FadeIn if transition.timer >= 0.35 => {
+        TransitionPhase::FadeIn if transition.timer >= FADE_DURATION => {
             transition.active = false;
             transition.phase = TransitionPhase::Idle;
             transition.timer = 0.0;
@@ -160,9 +164,9 @@ fn update_fade_overlay(
 ) {
     let fade_strength = if transition.active {
         match transition.phase {
-            TransitionPhase::FadeOut => (transition.timer / 0.35).clamp(0.0, 1.0),
+            TransitionPhase::FadeOut => (transition.timer / FADE_DURATION).clamp(0.0, 1.0),
             TransitionPhase::Swap => 1.0,
-            TransitionPhase::FadeIn => (1.0 - transition.timer / 0.35).clamp(0.0, 1.0),
+            TransitionPhase::FadeIn => (1.0 - transition.timer / FADE_DURATION).clamp(0.0, 1.0),
             TransitionPhase::Idle => 0.0,
         }
     } else {
@@ -203,16 +207,17 @@ fn update_fade_overlay(
 fn animate_doors(
     time: Res<Time>,
     player: Query<&Transform, With<Player>>,
-    mut leaves: Query<(&Door, &mut DoorOpen, &mut Transform), With<DoorLeaf>>,
+    mut leaves: Query<(&Door, &mut DoorOpen, &mut Transform), (With<DoorLeaf>, Without<Player>)>,
 ) {
     let Ok(player_tf) = player.single() else {
         return;
     };
+    let player_pos = player_tf.translation;
 
     for (door, mut open, mut leaf_tf) in &mut leaves {
-        let near = crate::door::player_at_door(player_tf, door.placement);
-        let target_open = if near { 0.75 } else { 0.0 };
-        let blend = 1.0 - (-8.0 * time.delta_secs()).exp();
+        let near = crate::door::player_at_door(player_pos, door.placement);
+        let target_open = if near { 0.82 } else { 0.0 };
+        let blend = 1.0 - (-5.5 * time.delta_secs()).exp();
         open.amount += (target_open - open.amount) * blend;
 
         let base_y = match door.placement {
